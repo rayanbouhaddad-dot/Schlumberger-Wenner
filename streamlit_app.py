@@ -1,17 +1,20 @@
 # ==============================
 # 1D DC Forward Modelling (SimPEG)
-# App Streamlit — Schlumberger + Wenner
+# Streamlit app — Schlumberger + Wenner
 # ==============================
 
 # --- Core scientific libraries ---
 import numpy as np                  # Calcul numérique
 import pandas as pd                 # Manipulation de tableaux
+import matplotlib.pyplot as plt     # Librairie de PLOT (remplace Plotly)
 import streamlit as st              # Interface Web
-import plotly.graph_objects as go   # GRAPHIQUES INTERACTIFS
 
 # --- SimPEG modules for DC resistivity ---
 from simpeg.electromagnetics.static import resistivity as dc
 from simpeg import maps
+
+# --- Outils Matplotlib pour les axes log-log ---
+from matplotlib.ticker import LogLocator, LogFormatter, NullFormatter
 
 # ---------------------------
 # 1) CONFIGURATION DE LA PAGE
@@ -19,9 +22,9 @@ from simpeg import maps
 
 st.set_page_config(page_title="Modélisation 1D DC (SimPEG)", page_icon="⚡", layout="wide")
 
-st.title("⚡ 1D DC Resistivity — Modélisation Interactive (Schlumberger vs Wenner)")
+st.title("⚡ 1D DC Resistivity — Modélisation Robuste (Schlumberger vs Wenner)")
 st.markdown(
-    "Configurez un modèle de sous-sol stratifié. Cette application calcule la **Résistivité Apparente** "
+    "Configurez un modèle de sous-sol stratifié. L'application calcule la **Résistivité Apparente** "
     "et les **Facteurs Géométriques (K)** pour les dispositifs **Schlumberger** et **Wenner**."
 )
 
@@ -58,7 +61,6 @@ with st.sidebar:
     default_rho = [100.0, 20.0, 500.0, 100.0, 1000.0]
     default_thk = [10.0, 20.0, 50.0, 50.0]
 
-    # Entrées dynamiques pour les couches
     layer_rhos = []
     thicknesses = []
     
@@ -79,7 +81,6 @@ with st.sidebar:
             else:
                 st.write("(Demi-espace)")
 
-# Conversion en numpy arrays
 thicknesses = np.array(thicknesses)
 rho_layers = np.array(layer_rhos)
 
@@ -87,17 +88,14 @@ rho_layers = np.array(layer_rhos)
 # 3) CALCUL DE LA GÉOMÉTRIE & FACTEURS K
 # ==============================================================
 
-# Distribution logarithmique de AB/2
 AB2 = np.geomspace(ab2_min, ab2_max, n_stations)
 
-# --- Géométrie Schlumberger ---
+# Schlumberger
 MN2_s = np.minimum(0.1 * AB2, 0.45 * AB2) 
-# K = pi * ( (AB/2)^2 - (MN/2)^2 ) / MN ; MN = 2 * MN/2
 K_schlumberger = np.pi * (AB2**2 - MN2_s**2) / (2 * MN2_s)
 
-# --- Géométrie Wenner ---
+# Wenner
 a_wenner = (2.0/3.0) * AB2
-# K = 2 * pi * a
 K_wenner = 2 * np.pi * a_wenner
 
 # ==============================================================
@@ -106,14 +104,14 @@ K_wenner = 2 * np.pi * a_wenner
 
 src_list_s = []
 src_list_w = []
+eps = 1e-4
 
 for i in range(n_stations):
     # Sources Schlumberger
     A_s = np.r_[-AB2[i], 0., 0.]
     B_s = np.r_[+AB2[i], 0., 0.]
-    M_s = np.r_[-MN2_s[i], 0., 0.]
-    N_s = np.r_[+MN2_s[i], 0., 0.]
-    
+    M_s = np.r_[-MN2_s[i] + eps, 0., 0.]
+    N_s = np.r_[+MN2_s[i] - eps, 0., 0.]
     rx_s = dc.receivers.Dipole(M_s, N_s, data_type="apparent_resistivity")
     src_list_s.append(dc.sources.Dipole([rx_s], A_s, B_s))
 
@@ -123,7 +121,6 @@ for i in range(n_stations):
     M_w = np.r_[-0.5*a, 0., 0.]
     N_w = np.r_[+0.5*a, 0., 0.]
     B_w = np.r_[+1.5*a, 0., 0.]
-    
     rx_w = dc.receivers.Dipole(M_w, N_w, data_type="apparent_resistivity")
     src_list_w.append(dc.sources.Dipole([rx_w], A_w, B_w))
 
@@ -139,7 +136,6 @@ sim_w = dc.simulation_1d.Simulation1DLayers(
     survey=survey_w, rhoMap=rho_map, thicknesses=thicknesses
 )
 
-# Exécution du modèle direct
 try:
     d_s = sim_s.dpred(rho_layers)
     d_w = sim_w.dpred(rho_layers)
@@ -149,11 +145,12 @@ except Exception as e:
     success = False
 
 # ==============================================================
-# 5) AFFICHAGE INTERACTIF & RÉSULTATS
+# 5) AFFICHAGE DES RÉSULTATS (Matplotlib)
 # ==============================================================
 
 if success:
-    # Création du DataFrame
+    
+    # Préparation du DataFrame pour l'export
     df = pd.DataFrame({
         "AB/2 (m)": AB2,
         "Schlumberger ρa": d_s,
@@ -164,115 +161,104 @@ if success:
         "a Wenner": a_wenner
     })
 
-    # --- DISPOSITION EN ONGLETS ---
+    # --- Onglets ---
     tab1, tab2, tab3 = st.tabs(["📈 Courbes de Sondage", "📐 Facteurs Géométriques (K)", "🔢 Données & Modèle"])
 
-    # --- ONGLET 1 : Courbes de Sondage (Plotly) ---
+    # --- ONGLET 1 : Courbes de Sondage (Matplotlib) ---
     with tab1:
-        fig_rho = go.Figure()
-
-        # Trace Schlumberger
-        fig_rho.add_trace(go.Scatter(
-            x=AB2, y=d_s, mode='lines+markers', name='Schlumberger',
-            marker=dict(symbol='circle', size=7),
-            hovertemplate="<b>Schlumberger</b><br>AB/2: %{x:.2f} m<br>ρa: %{y:.2f} Ω·m<extra></extra>"
-        ))
-
-        # Trace Wenner
-        fig_rho.add_trace(go.Scatter(
-            x=AB2, y=d_w, mode='lines+markers', name='Wenner',
-            line=dict(dash='dash'),
-            marker=dict(symbol='square', size=7),
-            hovertemplate="<b>Wenner</b><br>AB/2: %{x:.2f} m<br>ρa: %{y:.2f} Ω·m<extra></extra>"
-        ))
-
-        fig_rho.update_layout(
-            title="Courbes de Sondage Électrique (Log-Log)",
-            xaxis_title="AB/2 (m)",
-            yaxis_title="Résistivité Apparente (Ω·m)",
-            xaxis_type="log",
-            yaxis_type="log",
-            hovermode="x unified",
-            height=600,
-            template="plotly_white"
-        )
-        fig_rho.update_xaxes(showgrid=True, gridwidth=1, gridcolor='LightGray', minor=dict(showgrid=True))
-        fig_rho.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray', minor=dict(showgrid=True))
+        st.subheader("Courbes de Sondage Électrique (Log-Log)")
         
-        st.plotly_chart(fig_rho, use_container_width=True)
+        fig, ax = plt.subplots(figsize=(8, 6))
 
-    # --- ONGLET 2 : Facteurs Géométriques (Plotly) ---
+        # Tracé des deux courbes en échelle log-log
+        ax.loglog(AB2, d_s, "o-", label="Schlumberger ρₐ")
+        ax.loglog(AB2, d_w, "s--", label="Wenner ρₐ")
+
+        # Configuration des limites Y (étendu aux décades entières)
+        ymin = np.minimum(d_s.min(), d_w.min())
+        ymax = np.maximum(d_s.max(), d_w.max())
+        ymin = 10 ** np.floor(np.log10(ymin))
+        ymax = 10 ** np.ceil(np.log10(ymax))
+        ax.set_ylim(ymin, ymax)
+
+        # Configuration des axes log-log (pour une meilleure lisibilité)
+        ax.yaxis.set_major_locator(LogLocator(base=10.0, subs=(1.0,)))
+        ax.yaxis.set_minor_locator(LogLocator(base=10.0, subs=np.arange(2, 10) * 0.1))
+        ax.yaxis.set_major_formatter(LogFormatter(base=10.0, labelOnlyBase=True))
+        ax.yaxis.set_minor_formatter(NullFormatter())
+
+        ax.xaxis.set_major_locator(LogLocator(base=10.0, subs=(1.0,)))
+        ax.xaxis.set_minor_locator(LogLocator(base=10.0, subs=np.arange(2, 10) * 0.1))
+        ax.xaxis.set_major_formatter(LogFormatter(base=10.0, labelOnlyBase=True))
+        ax.xaxis.set_minor_formatter(NullFormatter())
+
+        ax.grid(True, which="both", ls=":", alpha=0.7)
+
+        ax.set_xlabel("AB/2 (m)")
+        ax.set_ylabel("Résistivité Apparente (Ω·m)")
+        ax.legend()
+        st.pyplot(fig, clear_figure=True)
+
+
+    # --- ONGLET 2 : Facteurs Géométriques (K) ---
     with tab2:
-        st.markdown("Le facteur géométrique $K$ relie la mesure à la résistivité : $V = \\rho_a \cdot I / K$")
-        fig_k = go.Figure()
+        st.subheader("Facteurs Géométriques (K)")
+        st.markdown("Visualisation Log-Log des facteurs $K$ en fonction de $AB/2$.")
+        
+        fig_k, ax_k = plt.subplots(figsize=(8, 6))
+        ax_k.loglog(AB2, K_schlumberger, "o-", label="K Schlumberger")
+        ax_k.loglog(AB2, K_wenner, "s--", label="K Wenner")
+        
+        ax_k.set_xlabel("AB/2 (m)")
+        ax_k.set_ylabel("Facteur K (m)")
+        ax_k.grid(True, which="both", ls=":", alpha=0.7)
+        ax_k.legend()
+        st.pyplot(fig_k, clear_figure=True)
 
-        fig_k.add_trace(go.Scatter(
-            x=AB2, y=K_schlumberger, mode='lines', name='K (Schlumberger)',
-            line=dict(color='orange', width=3)
-        ))
-        fig_k.add_trace(go.Scatter(
-            x=AB2, y=K_wenner, mode='lines', name='K (Wenner)',
-            line=dict(color='green', width=3, dash='dot')
-        ))
 
-        fig_k.update_layout(
-            title="Facteur Géométrique K vs Espacement",
-            xaxis_title="AB/2 (m)",
-            yaxis_title="Facteur K (m)",
-            xaxis_type="log",
-            yaxis_type="log",
-            hovermode="x unified",
-            height=500,
-            template="plotly_white"
-        )
-        st.plotly_chart(fig_k, use_container_width=True)
-
-    # --- ONGLET 3 : Tableau & Visualisation du Modèle ---
+    # --- ONGLET 3 : Tableau & Modèle ---
     with tab3:
-        c_left, c_right = st.columns([1, 2])
+        col1, col2 = st.columns([1, 2])
 
-        # Visualisation du modèle (Step Plot)
-        with c_left:
-            st.subheader("Modèle de Couches")
+        with col1:
+            st.subheader("Modèle de Couches (Viz)")
+            fig2, ax2 = plt.subplots(figsize=(4, 5))
             
-            # Construction des tableaux de profondeur pour l'affichage en escalier
-            plot_depths = [0]
-            plot_rhos = [rho_layers[0]]
-            
-            current_z = 0
-            for i in range(len(thicknesses)):
-                current_z += thicknesses[i]
-                # Coin du "step"
-                plot_depths.append(current_z)
-                plot_rhos.append(rho_layers[i])
-                # Marche du "step"
-                plot_depths.append(current_z)
-                plot_rhos.append(rho_layers[i+1])
-            
-            # Extension de la dernière couche vers "l'infini"
-            plot_depths.append(current_z * 1.5 + 10)
-            plot_rhos.append(rho_layers[-1])
+            # Représentation du modèle de terre
+            if len(thicknesses):
+                interfaces = np.r_[0.0, np.cumsum(thicknesses)]
+            else:
+                interfaces = np.r_[0.0]
 
-            fig_model = go.Figure()
-            fig_model.add_trace(go.Scatter(
-                x=plot_rhos, y=plot_depths, 
-                mode='lines', line_shape='hv', 
-                fill='tozerox', fillcolor='rgba(0,100,80,0.2)'
-            ))
-            fig_model.update_yaxes(autorange="reversed", title="Profondeur (m)")
-            fig_model.update_xaxes(title="Résistivité (Ω·m)", type="log")
-            fig_model.update_layout(
-                margin=dict(l=20, r=20, t=30, b=20),
-                height=400,
-                showlegend=False,
-                title="Résistivité Vraie vs Profondeur"
-            )
-            st.plotly_chart(fig_model, use_container_width=True)
+            z_bottom = interfaces[-1] + max(interfaces[-1] * 0.3, 10.0)
 
-        with c_right:
-            st.subheader("Exporter les données")
-            st.dataframe(df, height=350)
+            tops = np.r_[interfaces, interfaces[-1]]
+            bottoms = np.r_[interfaces[1:], z_bottom]
+
+            for i in range(n_layers):
+                ax2.fill_betweenx([tops[i], bottoms[i]], 0, rho_layers[i], alpha=0.35)
+                ax2.text(
+                    rho_layers[i] * 1.05,
+                    (tops[i] + bottoms[i]) / 2,
+                    f"{rho_layers[i]:.1f} Ω·m",
+                    va="center",
+                    fontsize=9,
+                )
+
+            ax2.invert_yaxis()
+            ax2.set_xlabel("Résistivité (Ω·m)")
+            ax2.set_ylabel("Profondeur (m)")
+            ax2.grid(True, ls=":")
+            ax2.set_title("Modèle Vrai")
+            st.pyplot(fig2, clear_figure=True)
+
+        with col2:
+            st.subheader("Export des données")
             
+            # Affichage du DataFrame
+            st.dataframe(df, use_container_width=True)
+            
+            # Bouton de téléchargement
             csv = df.to_csv(index=False).encode('utf-8')
             st.download_button(
                 "⬇️ Télécharger CSV (Résultats + Facteurs K)",
