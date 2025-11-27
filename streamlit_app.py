@@ -1,4 +1,3 @@
-
 # ==============================
 # 1D DC Forward Modelling (SimPEG)
 # Streamlit app — Schlumberger + Wenner
