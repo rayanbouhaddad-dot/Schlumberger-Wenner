@@ -541,11 +541,11 @@ if ok:
     
     st.divider()
     
-    with st.expander("🎓 Exercices pédagogiques suggérés"):
+    with st.expander("🎓 Exercices/Question"):
         st.markdown("""
         ### Questions pour les étudiants :
         
-        1. **Influence des paramètres géométriques** :
+        1. **Question à poser pour les étudiant** :
            - Que se passe-t-il si on augmente MN/2 pour Schlumberger ?
            - Pourquoi utilise-t-on MN/2 petit pour Schlumberger ?
         
@@ -553,24 +553,13 @@ if ok:
            - Quelle configuration est la plus sensible aux couches intermédiaires ?
            - À quel AB/2 détecte-t-on la dernière interface ?
         
-        3. **Modification du modèle** :
-           - Ajoutez une couche conductrice entre deux couches résistives
-           - Que deviennent les courbes ?
-        
-        4. **Calcul manuel** :
+        4. **Exercice de calcul manuel** :
            - Pour AB/2 = 100 m, calculez manuellement K pour Wenner
-           - Vérifiez avec les résultats de la simulation
+          
         
         5. **Interprétation** :
            - Si ρₐ > ρ₁ pour petits AB/2, que peut-on dire du sous-sol ?
            - Comment évolue la profondeur d'investigation avec AB/2 ?
         """)
-    
-    # Note finale
-    st.caption("""
-    **Application pédagogique développée pour l'enseignement de la géophysique** | 
-    Basée sur SimPEG | Les facteurs K sont calculés selon les formules théoriques standards.
-    """)
-
 else:
     st.warning("Ajustez les paramètres pour obtenir une simulation valide.")
