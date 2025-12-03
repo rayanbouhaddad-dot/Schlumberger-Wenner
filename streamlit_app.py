@@ -19,9 +19,9 @@ from simpeg import maps
 # 1) PAGE SETUP & HEADER
 # ---------------------------
 
-st.set_page_config(page_title="1D DC Resistivity (Pédagogique)", page_icon="🎓", layout="wide")
+st.set_page_config(page_title="Programme Géophysique RB", page_icon="🎓", layout="wide")
 
-st.title("🎓 Modélisation DC 1D - Pédagogique pour étudiants")
+st.title("🎓 "Programme Géophysique RB")
 st.markdown("""
 **Objectif pédagogique** : Comprendre les principes des sondages électriques et 
 comparer les configurations Schlumberger et Wenner.
