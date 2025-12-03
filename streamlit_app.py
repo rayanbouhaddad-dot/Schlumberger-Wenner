@@ -21,7 +21,7 @@ from simpeg import maps
 
 st.set_page_config(page_title="Programme Géophysique RB", page_icon="🎓", layout="wide")
 
-st.title("🎓 "Programme Géophysique RB")
+st.title("🎓 "Programme_Géophysique_RB")
 st.markdown("""
 **Objectif pédagogique** : Comprendre les principes des sondages électriques et 
 comparer les configurations Schlumberger et Wenner.
